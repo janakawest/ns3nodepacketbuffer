@@ -154,20 +154,25 @@ public:
 	uint16_t GetAveragePacketSize (Ptr<NetDevice> device);
 	
 	/**
-	 * \brief Get and Set the service rate of the router
-	 * \param mue average service rate
-	 * \returns the average service rate
+	 * \brief Get the Mue of the server
+	 * \param device the device we wanted to get the mue
+	 * \returns the mue value
 	 */
-	uint16_t GetRouterMue(void);
-	
-	void SetRouterMue (uint16_t mue);
+	double GetRouterMue(Ptr<NetDevice> device);
+
+	/**
+	 * \brief Get the packet per second value of the serve
+	 * \returns the service rate
+	 */	
+	double GetRouterServiceRate (void);
 
 	/**
 	 * \brief Get and Set the arrival rate of the router
+	 * \param device the device we wanted to get the lambda	 
 	 * \param lambda average arrival rate
 	 * \returns the average arrival rate
 	 */
-	uint16_t GetRouterLambda (void);
+	double GetRouterLambda (Ptr<NetDevice> device);
 	
 	void SetRouterLambda (uint16_t lambda);
 // \}
@@ -329,9 +334,9 @@ private:
   /**
    * \brief schedule the next transmit for the protocol layer.
    * this has been implemented to call over every given time interval.
-   * \param dt next schedule time
+   * \param device the netdevice of the packet transmit scheduler
    */
-	void ScheduleTransmit(double dt);
+	void ScheduleTransmit(Ptr<NetDevice> device);
 	
 	 /**
    * \brief This method is called by the ScheduleTransmit method every given 
@@ -347,13 +352,15 @@ private:
 	NodeQueue m_nodePacketBuffer; //!< the object of the packet queue
 	EventId m_nextTransmission; //!< event to schedule the next packet transmission to the protocol layer
 	uint8_t m_initiator; //!< initiate the packet queue
-	uint16_t m_Mue; //!< service rate
-	uint16_t m_Lambda; //!< packet arrival rate
-	uint16_t m_lAvg; //!< average packet arrival rate
-	uint16_t m_Cnt; //!< counter to calculate the average packet arrival rate
-	std::map<Ptr<NetDevice>,uint16_t> m_devicesPacketCount; //!< store the packet count of each device
-	std::map<Ptr<NetDevice>,uint16_t> m_devicesAvgPktSize; //!< store the packet size of each device
-	Ptr<NormalRandomVariable> m_serviceRate; //!< service rate of the router 
+	double m_Mue; //!< service rate
+	double m_Lambda; //!< packet arrival rate
+	double m_serviceRate; //!< service rate of the router
+
+	std::map<Ptr<NetDevice>,uint32_t> m_devicesPacketCount; //!< store the packet count of each device
+	std::map<Ptr<NetDevice>,uint32_t> m_devicesAvgPktSize; //!< store the packet size of each device
+	std::map<Ptr<NetDevice>,uint64_t> m_devicesCumPktCount; //!< store the cumilative packet of each device
+	std::map<Ptr<NetDevice>,double> m_devicesMue; //!< store the cumilative packet of each device	
+  Ptr<UniformRandomVariable> m_rng; //!< Rng stream.
 // \}
 };
 

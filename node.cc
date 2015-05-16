@@ -18,6 +18,9 @@
  * Authors: George F. Riley<riley@ece.gatech.edu>
  *          Mathieu Lacage <mathieu.lacage@sophia.inria.fr>
  */
+ 
+#include <math.h>
+
 #include "node.h"
 #include "node-list.h"
 #include "net-device.h"
@@ -30,7 +33,9 @@
 #include "ns3/assert.h"
 #include "ns3/global-value.h"
 #include "ns3/boolean.h"
+#include "ns3/core-module.h"
 #include "ns3/simulator.h"
+#include "ns3/random-variable.h"
 
 #include "ns3/double.h"
 #include "node-packet-queue.h"
@@ -81,10 +86,9 @@ Node::Node()
   : m_id (0),
     m_sid (0),
 		m_initiator(0),
- 		m_Mue(0),
-		m_Lambda(0),
-		m_lAvg(0),
-		m_Cnt(0)
+ 		m_Mue(0.0),
+		m_Lambda(0.0),
+		m_serviceRate(0.0)
 {
   NS_LOG_FUNCTION (this);
   Construct ();
@@ -94,10 +98,9 @@ Node::Node(uint32_t sid)
   : m_id (0),
     m_sid (sid),
 		m_initiator(0),
-		m_Mue(0),
-		m_Lambda(0),
-		m_lAvg(0),
-		m_Cnt(0)	    
+		m_Mue(0.0),
+		m_Lambda(0.0),
+		m_serviceRate(0.0)
 { 
   NS_LOG_FUNCTION (this << sid);
   Construct ();
@@ -107,10 +110,8 @@ void
 Node::Construct (void)
 {
   NS_LOG_FUNCTION (this);
-  
-  m_serviceRate = CreateObject <NormalRandomVariable> ();
-	m_serviceRate->SetAttribute ("Mean",DoubleValue(150.0));
-	m_serviceRate->SetAttribute ("Variance",DoubleValue(5.0));
+	
+	m_rng = CreateObject<UniformRandomVariable> ();
 	
   m_id = NodeList::Add (this);
 }
@@ -148,8 +149,10 @@ Node::AddDevice (Ptr<NetDevice> device)
   NotifyDeviceAdded (device);
   
   // creating per-node packet counters
-  m_devicesPacketCount.insert( std::pair <Ptr<NetDevice>,uint32_t> (device,0));
-	m_devicesAvgPktSize.insert( std::pair <Ptr<NetDevice>,uint32_t> (device,0));
+  m_devicesPacketCount.insert (std::pair <Ptr<NetDevice>,uint32_t> (device,0));
+	m_devicesAvgPktSize.insert (std::pair <Ptr<NetDevice>,uint32_t> (device,0));
+	m_devicesCumPktCount.insert (std::pair <Ptr<NetDevice>,uint64_t> (device,0));
+	m_devicesMue.insert (std::pair<Ptr<NetDevice>,double> (device, 0.0));
 	
   return index;
 }
@@ -250,28 +253,26 @@ Node::DoDispose ()
   	return (m_devicesAvgPktSize.find(device)->second);
 	}
 	
-	uint16_t 
-	Node::GetRouterMue(void)
+	double 
+	Node::GetRouterMue(Ptr<NetDevice> devic)
 	{
 		NS_LOG_FUNCTION (this);
   
   	return m_Mue;
 	}
 	
-	void 
-	Node::SetRouterMue (uint16_t mue)
+	double
+	Node::GetRouterServiceRate (void)
 	{
-	  // Todo: decide the value
-	  m_Mue = mue;
+	  return m_serviceRate;
 	}
 	
-	uint16_t 
-	Node::GetRouterLambda (void)
+	double 
+	Node::GetRouterLambda (Ptr<NetDevice> device)
 	{
 	  NS_LOG_FUNCTION (this);
- 	  // Todo: decide the value
-	  // returns the average lambda value of the router.
-	  return (m_lAvg/m_Cnt);	
+	  
+	  return (m_devicesCumPktCount.find(device)->second / Simulator::Now ().GetSeconds ());	
 	}
 	
 	//void SetRouterLambda (uint16_t lambda)
@@ -371,8 +372,6 @@ Node::PromiscReceiveFromDevice (Ptr<NetDevice> device, Ptr<const Packet> packet,
  	//  Then the pacekts will not be buffered. As soon as a packet arrives to the NetDevice,
  	//  the packet wil be moved to the Protocol handler for the forwarding process.
   //  return ReceiveFromDevice (device, packet, protocol, from, to, packetType, true);
-  
-	m_Lambda++;
 	
 	NodeQueueEntry nodeEnqueueEntry(device,
 																	packet,
@@ -385,17 +384,24 @@ Node::PromiscReceiveFromDevice (Ptr<NetDevice> device, Ptr<const Packet> packet,
 	NS_LOG_DEBUG ("Move the packet " << packet << " to the buffer.");											
 	m_nodePacketBuffer.EnQueue(nodeEnqueueEntry);
 	
-	m_devicesPacketCount.at(device) = (m_devicesPacketCount.find(device)->second)++;
+	m_devicesCumPktCount.at(device) = (m_devicesCumPktCount.find(device)->second)++;
 	
-	if (m_devicesPacketCount.find(device)->second != 0)
+  if (m_devicesPacketCount.find(device)->second == 0)
 	{
-		m_devicesAvgPktSize.at(device) = ((m_devicesAvgPktSize.find(device)->second * (m_devicesPacketCount.find(device)->second - 1)) +  packet->GetSize()) / m_devicesPacketCount.find(device)->second;
+		m_devicesAvgPktSize.at(device) = packet->GetSize();
+		
+		m_devicesPacketCount.at(device) = (m_devicesPacketCount.find(device)->second)++;
+	}
+	else
+	{
+		m_devicesPacketCount.at(device) = (m_devicesPacketCount.find(device)->second)++;	
+ 		m_devicesAvgPktSize.at(device) = ((m_devicesAvgPktSize.find(device)->second * (m_devicesPacketCount.find(device)->second - 1)) + packet->GetSize()) / (m_devicesPacketCount.find(device)->second);
 	}
 
 	if (!m_initiator)
   {
-    NS_LOG_DEBUG ("Inittiate the packet pransmitter.");
-    ScheduleTransmit(uint16_t(1));
+    NS_LOG_DEBUG ("Initiate the packet transmitter.");
+    ScheduleTransmit(device);
     m_initiator = 1;
   }
 	
@@ -408,14 +414,13 @@ Node::NonPromiscReceiveFromDevice (Ptr<NetDevice> device, Ptr<const Packet> pack
                                    const Address &from)
 {
   NS_LOG_FUNCTION (this << device << packet << protocol << &from);
+
  	// Note:  This has been modified to buffer packet on CallBack Fire
  	//  Author: Janaka Wijekoon <janaka@west.sd.ekio.ac.jp>
  	//  If we use the original Node::ReceiveFromDevice funtion, Uncomment the follwoing line.
  	//  Then the pacekts will not be buffered. As soon as a packet arrives to the NetDevice,
  	//  the packet wil be moved to the Protocol handler for the forwarding process.  
-  //return ReceiveFromDevice (device, packet, protocol, from, device->GetAddress (), NetDevice::PacketType (0), false);
-  
-	m_Lambda++;
+  // return ReceiveFromDevice (device, packet, protocol, from, device->GetAddress (), NetDevice::PacketType (0), false);
 	
 	NodeQueueEntry nodeEnqueueEntry(device,
 																	packet,
@@ -428,18 +433,26 @@ Node::NonPromiscReceiveFromDevice (Ptr<NetDevice> device, Ptr<const Packet> pack
 	NS_LOG_DEBUG ("Move the packet " << packet << " to the buffer.");
   m_nodePacketBuffer.EnQueue(nodeEnqueueEntry);
 
-	m_devicesPacketCount.at(device) = (m_devicesPacketCount.find(device)->second)++;
-	
-  if(m_devicesPacketCount.find(device)->second != 0)
-  {
-		m_devicesAvgPktSize.at(device) = ( (m_devicesAvgPktSize.find(device)->second * (m_devicesPacketCount.find(device)->second - 1)) +  packet->GetSize()) / m_devicesPacketCount.find(device)->second;
+	m_devicesCumPktCount.at(device) = (m_devicesCumPktCount.find(device)->second)++;
+
+	if (m_devicesPacketCount.find(device)->second == 0)
+	{
+		m_devicesAvgPktSize.at(device) = packet->GetSize();
+		
+		m_devicesPacketCount.at(device) = (m_devicesPacketCount.find(device)->second)++;
+	}
+	else
+	{
+		m_devicesPacketCount.at(device) = (m_devicesPacketCount.find(device)->second)++;	
+		
+ 		m_devicesAvgPktSize.at(device) = ((m_devicesAvgPktSize.find(device)->second * (m_devicesPacketCount.find(device)->second - 1)) + packet->GetSize()) / (m_devicesPacketCount.find(device)->second);
 	}
 
 	if(!m_initiator)
 	{
     NS_LOG_DEBUG ("Initiate the packet transmitter.");
     	
-		ScheduleTransmit(uint16_t(1));
+		ScheduleTransmit(device);
 		m_initiator = 1;
 	}
 	
@@ -448,96 +461,97 @@ Node::NonPromiscReceiveFromDevice (Ptr<NetDevice> device, Ptr<const Packet> pack
 }
 
 void
-Node::ScheduleTransmit(double dt)
+Node::ScheduleTransmit(Ptr<NetDevice> device)
 {
-	NS_LOG_FUNCTION (this << dt);
+	NS_LOG_FUNCTION (this);
 	
-	m_lAvg += m_Lambda;
-	m_Cnt++;
+	m_serviceRate = 1000000.0; // 100Mbps
 	
-	m_Lambda = 0;
-	m_nextTransmission = Simulator::Schedule (Seconds(0.4), &Node::ReceiveFromBuffer, this);
+	double randValue = m_rng->GetValue (0.0, 1.0);
+	
+	m_Mue = m_serviceRate / (GetAveragePacketSize (device) * 8.0);
+	
+	m_devicesMue.at(device) = m_Mue;
+	
+	double tempTime = (-1/m_Mue) *(log (randValue));
+	Time t_reSchedule = Seconds (tempTime);
+
+	ReceiveFromBuffer ();
+	
+	m_nextTransmission = Simulator::Schedule (t_reSchedule, &Node::ScheduleTransmit, this, device);
 }
 
 void
 Node::ReceiveFromBuffer(void)
 {
-	uint8_t PPS=0;
 
 	// Get the service rate of the router.
 	// As the service rate is a random value, the service rate is determined by the random stream
  	// We have to adjust this value according to the model we are going to implement.
  	// For the testing purposes I have just gave a number
- 	// Author: Janaka Wijekoon <janaka@west.sd.ekio.ac.jp>	
- 	
-	m_Mue = m_serviceRate->GetValue ();
-	
-  while (PPS < m_Mue)
-	{
-		if (m_nodePacketBuffer.IsEmpty())
- 		{
-			NS_LOG_DEBUG ("No packet to transmit, reschedule.");
-			break;
-		}
-		else
-		{
-			NodeQueueEntry deQueueEntry;
-			
-			m_nodePacketBuffer.DeQueue(deQueueEntry);
-			
-			NS_LOG_DEBUG (  deQueueEntry.GetNetDevice() 
-											<< deQueueEntry.GetPacket() 
-											<< deQueueEntry.GetProtocol() 
-											<< deQueueEntry.GetFrom() 
-											<< deQueueEntry.GetTo() 
-											<< deQueueEntry.GetPacketType() 
-											<< deQueueEntry.GetPromiscuous());
-											
-  		NS_ASSERT_MSG (Simulator::GetContext () == GetId (), 
-												"Received packet with erroneous context ; " 
-												<< "make sure the channels in use are correctly updating events context " 
-												<< "when transferring events from one node to another.");
-  		NS_LOG_DEBUG ("Node " << GetId () 
-												<< " ReceiveFromDevice:  dev "
-												<< deQueueEntry.GetNetDevice()->GetIfIndex () 
-												<< " (type=" 
-												<< deQueueEntry.GetNetDevice()->GetInstanceTypeId ().GetName () 
-												<< ") Packet UID " 
-												<< deQueueEntry.GetPacket()->GetUid ());
-												
-  		for (ProtocolHandlerList::iterator i = m_handlers.begin (); i != m_handlers.end (); i++)
-			{
-				if (i->device == 0 || (i->device != 0 && i->device == deQueueEntry.GetNetDevice()))
-				{
-					if (i->protocol == 0 || i->protocol == deQueueEntry.GetProtocol())
-					{
-						if (deQueueEntry.GetPromiscuous() == i->promiscuous)
-						{
-							i->handler( deQueueEntry.GetNetDevice(),
-													deQueueEntry.GetPacket(),
-													deQueueEntry.GetProtocol(),
-													deQueueEntry.GetFrom(),
-													deQueueEntry.GetTo(),
-													deQueueEntry.GetPacketType());
+ 	// Author: Janaka Wijekoon <janaka@west.sd.ekio.ac.jp>
 
-							if (m_devicesPacketCount.find(deQueueEntry.GetNetDevice())->second != 0)
-							{
-						    // calculate the new average per-node packet count
-								m_devicesAvgPktSize.at(i->device) = ((m_devicesAvgPktSize.find(i->device)->second * m_devicesPacketCount.find(i->device)->second) - deQueueEntry.GetPacket()->GetSize()) / m_devicesPacketCount.find(i->device)->second;
-								
-							  // reduce the per-node packet count
-								m_devicesPacketCount.at(i->device) = (m_devicesPacketCount.find(i->device)->second)--;								
-								break;
-							}
-						}
-					}
-				}
-			}
-		}
-		PPS++;
+	if (m_nodePacketBuffer.IsEmpty())
+	{
+		NS_LOG_DEBUG ("No packet to transmit, reschedule.");
+		return;//break;
 	}
-	// Schedule the next transmit
-	ScheduleTransmit(uint16_t(1));
+	else
+	{
+    NodeQueueEntry deQueueEntry;
+
+    m_nodePacketBuffer.DeQueue(deQueueEntry);
+
+    NS_LOG_DEBUG (  deQueueEntry.GetNetDevice() 
+								    << deQueueEntry.GetPacket() 
+								    << deQueueEntry.GetProtocol() 
+								    << deQueueEntry.GetFrom() 
+								    << deQueueEntry.GetTo() 
+								    << deQueueEntry.GetPacketType() 
+								    << deQueueEntry.GetPromiscuous());
+								
+    NS_ASSERT_MSG (Simulator::GetContext () == GetId (), 
+									    "Received packet with erroneous context ; " 
+									    << "make sure the channels in use are correctly updating events context " 
+									    << "when transferring events from one node to another.");
+    NS_LOG_DEBUG ("Node " << GetId () 
+									    << " ReceiveFromDevice:  dev "
+									    << deQueueEntry.GetNetDevice()->GetIfIndex () 
+									    << " (type=" 
+									    << deQueueEntry.GetNetDevice()->GetInstanceTypeId ().GetName () 
+									    << ") Packet UID " 
+									    << deQueueEntry.GetPacket()->GetUid ());
+									
+    for (ProtocolHandlerList::iterator i = m_handlers.begin (); i != m_handlers.end (); i++)
+    {
+	    if (i->device == 0 || (i->device != 0 && i->device == deQueueEntry.GetNetDevice()))
+	    {
+		    if (i->protocol == 0 || i->protocol == deQueueEntry.GetProtocol())
+		    {
+			    if (deQueueEntry.GetPromiscuous() == i->promiscuous)
+			    {
+				    i->handler( deQueueEntry.GetNetDevice(),
+										    deQueueEntry.GetPacket(),
+										    deQueueEntry.GetProtocol(),
+										    deQueueEntry.GetFrom(),
+										    deQueueEntry.GetTo(),
+										    deQueueEntry.GetPacketType());
+
+				    if (--(m_devicesPacketCount.find(deQueueEntry.GetNetDevice())->second) != 0)
+				    {
+			        // calculate the new average per-node packet count
+
+              m_devicesAvgPktSize.at(i->device) = ((m_devicesAvgPktSize.find(i->device)->second * m_devicesPacketCount.find(i->device)->second) - deQueueEntry.GetPacket()->GetSize()) / ((m_devicesPacketCount.find(i->device)->second)--);
+
+				      // reduce the per-node packet count
+					    m_devicesPacketCount.at(i->device) = (m_devicesPacketCount.find(i->device)->second)--;
+					    break;
+				    }
+			    }
+		    }
+	    }
+    }
+	}
 }
 
 bool
