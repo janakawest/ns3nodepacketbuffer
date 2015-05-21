@@ -144,21 +144,26 @@ public:
 	 * \param device the netdevice
    * \returns the number of packets
    */
-  uint16_t GetNofPackets (Ptr<NetDevice> device);
+  uint16_t GetNofPacketsOfDevice (Ptr<NetDevice> device);
 	
 	/**
 	 * \brief get the average packet size of all received/transmitted packets from/to a netdevice
 	 * \param device the netdevice
 	 * \returns the average packet size
 	 */
-	uint16_t GetAveragePacketSize (Ptr<NetDevice> device);
+	uint16_t GetAveragePacketSizeOfDevice (Ptr<NetDevice> device);
+	
+	/**
+	 * \brief get the cumulative average packet size of the entire router.
+	 * \returns the average packet size of the router
+	 */	
+	double GetAveragePacketSizeOfRouter (void);	
 	
 	/**
 	 * \brief Get the Mue of the server
-	 * \param device the device we wanted to get the mue
 	 * \returns the mue value
 	 */
-	double GetRouterMue(Ptr<NetDevice> device);
+	double GetRouterMue(void);
 
 	/**
 	 * \brief Get the packet per second value of the serve
@@ -168,11 +173,9 @@ public:
 
 	/**
 	 * \brief Get and Set the arrival rate of the router
-	 * \param device the device we wanted to get the lambda	 
-	 * \param lambda average arrival rate
-	 * \returns the average arrival rate
+	 * \returns the average arrival rate of the router
 	 */
-	double GetRouterLambda (Ptr<NetDevice> device);
+	double GetRouterLambda (void);
 	
 	void SetRouterLambda (uint16_t lambda);
 // \}

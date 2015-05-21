@@ -15,7 +15,7 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
  *
- * Author: Janaka Wijekoon <janaka@west.sd.ekio.ac.jp>, Rajitha Tennekoon <rajitha@west.sd.keio.ac.jp>
+ * Author: Janaka Wijekoon <janaka@west.sd.ekio.ac.jp>
  */
 
 #include <vector>
@@ -41,22 +41,24 @@ NodeQueue::IsEmpty()
 }
 
 bool 
-NodeQueue::EnQueue ( NodeQueueEntry & enEntry )
+NodeQueue::EnQueue (NodeQueueEntry & enEntry)
 {
-	NS_LOG_FUNCTION ("Enqueing packet");
+	NS_LOG_FUNCTION (this << enEntry.GetPacket()->GetUid());
 	/*for the time being the Maximum length for the queue is not defined.*/
-	NS_LOG_DEBUG("Packet added to the Queue "<<enEntry.GetPacket()->GetUid());
+
 	m_queue.push_back (enEntry);
 	return true;
 }
 
 bool 
-NodeQueue::DeQueue ( NodeQueueEntry & deEntry )
+NodeQueue::DeQueue (NodeQueueEntry & deEntry)
 {
-	NS_LOG_FUNCTION ("Dequeueing packet");
+	NS_LOG_FUNCTION (this);
+	
 	std::vector<NodeQueueEntry>::iterator i = m_queue.begin (); 
 	deEntry = *i;
 	m_queue.erase (i);
+	
 	return true;	
 }
 
