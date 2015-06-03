@@ -144,14 +144,14 @@ public:
 	 * \param device the netdevice
    * \returns the number of packets
    */
-  uint16_t GetNofPacketsOfDevice (Ptr<NetDevice> device);
+  uint64_t GetNofPacketsOfDevice (Ptr<NetDevice> device);
 	
 	/**
 	 * \brief get the average packet size of all received/transmitted packets from/to a netdevice
 	 * \param device the netdevice
 	 * \returns the average packet size
 	 */
-	uint16_t GetAveragePacketSizeOfDevice (Ptr<NetDevice> device);
+	uint64_t GetAveragePacketSizeOfDevice (Ptr<NetDevice> device);
 	
 	/**
 	 * \brief get the cumulative average packet size of the entire router.
@@ -347,22 +347,35 @@ private:
    * of the router). This is similar to the default function "ReceiveFromDevice".
    * however, at the time, the ReceiveFromDevice callback is triggered,
    * instead of sending the packet to the protocol handling layer, the packet will be
-   * buffered in to the queue. Then in every average service rate (i.e., mue)
-   * this method is called and handle defined number of packet to the protocol handler. 
+   * buffered in to the queue. Then, for each service rate of the router (i.e., mue)
+   * this method will be called and handle (i.e., forward to the protocol handler) one packet at a time. 
    */
 	void ReceiveFromBuffer(void);
 	
 	NodeQueue m_nodePacketBuffer; //!< the object of the packet queue
 	EventId m_nextTransmission; //!< event to schedule the next packet transmission to the protocol layer
 	uint8_t m_initiator; //!< initiate the packet queue
+	uint64_t m_totPacketCount; //!< total packets received to the device
 	double m_Mue; //!< service rate
 	double m_Lambda; //!< packet arrival rate
 	double m_serviceRate; //!< service rate of the router
+	
+  struct DeviceStats {
+    uint64_t RxCount; //!< Number of received packet to the NetDevice 
+    uint64_t avgPacketSize; //!< Average packet size handled by the NetDevice
+  };
 
-	std::map<Ptr<NetDevice>,uint32_t> m_devicesPacketCount; //!< store the packet count of each device
-	std::map<Ptr<NetDevice>,uint32_t> m_devicesAvgPktSize; //!< store the packet size of each device
-	std::map<Ptr<NetDevice>,uint64_t> m_devicesCumPktCount; //!< store the cumilative packet of each device
-	std::map<Ptr<NetDevice>,double> m_devicesMue; //!< store the cumilative packet of each device	
+  // Container for the NetDevice and its Statistics
+  typedef std::list<std::pair <Ptr<NetDevice>, DeviceStats> > deviceStat;
+
+  // Const Iterator for the NetDevice and its Statistics
+  typedef std::list<std::pair <Ptr<NetDevice>, DeviceStats> >::const_iterator deviceStatCI;
+
+  // Iterator for the NetDevice and its Statistics
+  typedef std::list<std::pair <Ptr<NetDevice>, DeviceStats> >::iterator deviceStatI;
+  
+  deviceStat m_deviceStats;
+
   Ptr<UniformRandomVariable> m_rng; //!< Rng stream.
 // \}
 };
