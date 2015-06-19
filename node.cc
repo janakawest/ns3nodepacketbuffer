@@ -35,7 +35,6 @@
 #include "ns3/boolean.h"
 #include "ns3/core-module.h"
 #include "ns3/simulator.h"
-#include "ns3/random-variable.h"
 
 #include "ns3/double.h"
 #include "node-packet-queue.h"
@@ -156,6 +155,7 @@ Node::AddDevice (Ptr<NetDevice> device)
   stat.avgPacketSize = 0;
   
   m_deviceStats.push_back (std::make_pair (device, stat));
+  
 //  m_devicesPacketCount.insert (std::pair <Ptr<NetDevice>,uint32_t> (device,0));
 //	m_devicesAvgPktSize.insert (std::pair <Ptr<NetDevice>,uint32_t> (device,0));
 //	m_devicesCumPktCount.insert (std::pair <Ptr<NetDevice>,uint64_t> (device,0));
@@ -208,6 +208,15 @@ void
 Node::DoDispose ()
 {
   NS_LOG_FUNCTION (this);
+    // used for testing purposes  
+    uint8_t count = 1;
+    for (deviceStatI iter = m_deviceStats.begin (); iter != m_deviceStats.end (); iter++)
+    {
+      std::cout << int (m_id) << " " << int (count) << " " << (iter->second.avgPacketSize * iter->second.RxCount * 8)/Simulator::Now ().GetSeconds () << std::endl; // calculate bps
+      count++;
+    }	
+    std::cout<<std::endl;
+  
   m_deviceAdditionListeners.clear ();
   m_handlers.clear ();
   for (std::vector<Ptr<NetDevice> >::iterator i = m_devices.begin ();
@@ -415,12 +424,12 @@ Node::PromiscReceiveFromDevice (Ptr<NetDevice> device, Ptr<const Packet> packet,
     {
       if (iter->second.RxCount == 0)
       {
-        iter->second.RxCount ++;
+        iter->second.RxCount = iter->second.RxCount + 1;
         iter->second.avgPacketSize = packet->GetSize();
       }
       else
       {
-        iter->second.RxCount ++;
+        iter->second.RxCount = iter->second.RxCount + 1;
         iter->second.avgPacketSize = ((iter->second.avgPacketSize * (iter->second.RxCount - 1)) + packet->GetSize()) / (iter->second.RxCount) ;        
       }
     }
@@ -469,13 +478,13 @@ Node::NonPromiscReceiveFromDevice (Ptr<NetDevice> device, Ptr<const Packet> pack
     {
       if (iter->second.RxCount == 0)
       {
-        iter->second.RxCount ++;
+        iter->second.RxCount = iter->second.RxCount + 1;
         iter->second.avgPacketSize = packet->GetSize();
       }
       else
       {
-        iter->second.RxCount ++;
-        iter->second.avgPacketSize = ((iter->second.avgPacketSize * (iter->second.RxCount - 1)) + packet->GetSize()) / (iter->second.RxCount) ;        
+        iter->second.RxCount = iter->second.RxCount + 1;
+        iter->second.avgPacketSize = ((iter->second.avgPacketSize * (iter->second.RxCount - 1)) + packet->GetSize()) / (iter->second.RxCount) ; 
       }
     }
   }
@@ -500,7 +509,7 @@ Node::ScheduleTransmit(Ptr<NetDevice> device)
 {
 	NS_LOG_FUNCTION (this);
 	
-	m_serviceRate = 50000000.0;//5000000.0 5Mbps //50000000.0;// 50Mbps
+	m_serviceRate = 90000000.0;//5000000.0 5Mbps //50000000.0;// 50Mbps
 	double randValue = 0.0, tempTime = 0.0;
 	Time t_reSchedule = Time ();
 	
