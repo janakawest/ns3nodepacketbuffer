@@ -153,6 +153,7 @@ Node::AddDevice (Ptr<NetDevice> device)
   DeviceStats stat;
   stat.RxCount = 0;
   stat.avgPacketSize = 0;
+  stat.TxCount = 0;
   
   m_deviceStats.push_back (std::make_pair (device, stat));
   
@@ -209,13 +210,13 @@ Node::DoDispose ()
 {
   NS_LOG_FUNCTION (this);
     // used for testing purposes  
-    uint8_t count = 1;
-    for (deviceStatI iter = m_deviceStats.begin (); iter != m_deviceStats.end (); iter++)
-    {
-      std::cout << int (m_id) << " " << int (count) << " " << (iter->second.avgPacketSize * iter->second.RxCount * 8)/Simulator::Now ().GetSeconds () << std::endl; // calculate bps
-      count++;
-    }	
-    std::cout<<std::endl;
+//    uint8_t count = 1;
+//    for (deviceStatI iter = m_deviceStats.begin (); iter != m_deviceStats.end (); iter++)
+//    {
+//      std::cout << int (m_id) << " " << int (count) << " " << (iter->second.avgPacketSize * iter->second.RxCount * 8)/Simulator::Now ().GetSeconds () << std::endl; // calculate bps
+//      count++;
+//    }	
+//    std::cout<<std::endl;
   
   m_deviceAdditionListeners.clear ();
   m_handlers.clear ();
@@ -260,7 +261,12 @@ Node::DoDispose ()
 	  for (deviceStatI iter = m_deviceStats.begin (); iter != m_deviceStats.end (); iter++)
 	  {
 	    if (iter->first == device)
-	      return (iter->second.RxCount);
+	    {
+        if ((iter->second.RxCount - iter->second.TxCount) == 0)
+	        return 1;
+	      else
+	        return (iter->second.RxCount - iter->second.TxCount);
+	    }
 	  }
 	  return 0;
   }
@@ -484,7 +490,7 @@ Node::NonPromiscReceiveFromDevice (Ptr<NetDevice> device, Ptr<const Packet> pack
       else
       {
         iter->second.RxCount = iter->second.RxCount + 1;
-        iter->second.avgPacketSize = ((iter->second.avgPacketSize * (iter->second.RxCount - 1)) + packet->GetSize()) / (iter->second.RxCount) ; 
+        iter->second.avgPacketSize = ((iter->second.avgPacketSize * (iter->second.RxCount - 1)) + packet->GetSize()) / (iter->second.RxCount); 
       }
     }
   }
@@ -509,14 +515,14 @@ Node::ScheduleTransmit(Ptr<NetDevice> device)
 {
 	NS_LOG_FUNCTION (this);
 	
-	m_serviceRate = 90000000.0;//5000000.0 5Mbps //50000000.0;// 50Mbps
+	m_serviceRate = 90000000.0;//90Mbps
 	double randValue = 0.0, tempTime = 0.0;
 	Time t_reSchedule = Time ();
 	
   if (!m_nodePacketBuffer.IsEmpty ())
 	{
 	  randValue = m_rng->GetValue (0.0, 1.0);
-	  m_Mue = m_serviceRate / GetAveragePacketSizeOfRouter ();
+	  m_Mue = m_serviceRate / (GetAveragePacketSizeOfRouter () * 8); // convert it to process a bit
 
 	  tempTime = ((-1/m_Mue) *(log (randValue))) * 1000000 ; // microseconds
 	  t_reSchedule = MicroSeconds (tempTime);	
@@ -581,6 +587,14 @@ Node::ReceiveFromBuffer(void)
 									      deQueueEntry.GetPacketType());
 		      }
 	      }
+      }
+    }
+    for (deviceStatI iter = m_deviceStats.begin (); iter != m_deviceStats.end (); iter++)
+    {
+      if (iter->first == deQueueEntry.GetNetDevice())
+      {
+        iter->second.TxCount = iter->second.TxCount + 1;
+        break;          
       }
     }
   }

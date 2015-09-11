@@ -362,6 +362,7 @@ private:
   struct DeviceStats {
     uint64_t RxCount; //!< Number of received packet to the NetDevice 
     uint64_t avgPacketSize; //!< Average packet size handled by the NetDevice
+    uint64_t TxCount; //!< Number of packets sent from the NetDevice
   };
 
   // Container for the NetDevice and its Statistics
