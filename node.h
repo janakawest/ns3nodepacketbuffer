@@ -351,6 +351,12 @@ private:
    */
 	void ReceiveFromBuffer(void);
 	
+  /**
+  * \brief the function developed for debugin purposes.
+  * every m_printDuration the function will output number of protocol messages
+  */
+  void PrintStats ();		
+	
 	NodeQueue m_nodePacketBuffer; //!< the object of the packet queue
 	EventId m_nextTransmission; //!< event to schedule the next packet transmission to the protocol layer
 	uint8_t m_initiator; //!< initiate the packet queue
@@ -377,6 +383,11 @@ private:
   deviceStat m_deviceStats;
 
   Ptr<UniformRandomVariable> m_rng; //!< Rng stream.
+  
+// \name for debugging
+// \{
+  EventId m_outEvent; //!< Next statistic printing even
+// \}  
 // \}
 };
 

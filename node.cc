@@ -448,6 +448,9 @@ Node::PromiscReceiveFromDevice (Ptr<NetDevice> device, Ptr<const Packet> packet,
   {
     NS_LOG_DEBUG ("Initiate the packet transmitter.");
     ScheduleTransmit(device);
+    m_outEvent = Simulator::Schedule (Seconds (50), 
+                                      &Node::PrintStats, 
+                                      this);    
     m_initiator = 1;
   }
 	
@@ -503,6 +506,9 @@ Node::NonPromiscReceiveFromDevice (Ptr<NetDevice> device, Ptr<const Packet> pack
     NS_LOG_DEBUG ("Initiate the packet transmitter.");
     	
 		ScheduleTransmit(device);
+    m_outEvent = Simulator::Schedule (Seconds (50), 
+                                      &Node::PrintStats, 
+                                      this);   		
 		m_initiator = 1;
 	}
 	
@@ -598,6 +604,42 @@ Node::ReceiveFromBuffer(void)
       }
     }
   }
+}
+
+void
+Node::PrintStats ()
+{
+  NS_LOG_FUNCTION (this);
+
+    //used for testing purposes  
+  uint64_t totBitCount = 0;
+  NS_UNUSED (totBitCount); // suppress "set but not used" compiler warning in optimized builds  
+  uint8_t count = 1;
+  for (deviceStatI iter = m_deviceStats.begin (); iter != m_deviceStats.end (); iter++, count++)
+  {
+//    totBitCount = totBitCount + (iter->second.avgPacketSize * iter->second.RxCount * 8);
+    if (count != 1) // omit the LOCALHOST interface
+    {
+      std::cout << int (m_id) 
+                << " " << int (count) 
+                << " " 
+                << ((iter->second.avgPacketSize * 
+                     iter->second.RxCount * 8) / 
+                     Simulator::Now ().GetSeconds ()) / 1000.0 
+                << std::endl; // calculate kbps
+    }
+  }	
+  
+//  std::cout << int (m_id) << " " 
+//            << int (totBitCount / Simulator::Now ().GetSeconds ()) 
+//            << std::endl; // calculate in bps
+
+
+//	std::cout << int (m_id)
+//						<< "  " << GetRouterLambda () / GetRouterMue ()
+//						<< std::endl;
+
+  m_outEvent = Simulator::Schedule (Seconds (50), &Node::PrintStats, this);  
 }
 
 bool
